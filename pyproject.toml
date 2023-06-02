@@ -1,0 +1,14 @@
+[tool.poetry]
+name = "uavpathfinder"
+version = "0.0.1"
+description = "3d Path planning python library for UAVs"
+authors = ["Mykyta Prokaiev <mykytaprokaiev@gmail.com>", "Farouk Haidar <farouk.haidar@outlook.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
