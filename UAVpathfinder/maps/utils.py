@@ -42,7 +42,5 @@ def coord_to_cart(relative_coord: List[float], coord: List[float]) -> List[float
         * math.cos(math.radians(relative_coord[0]))
     )
     y = 6371752.3 * (math.radians(flip_coord[0]) - math.radians(relative_coord[0]))
-    print(" ")
-    print(distance)
-    print([x, y])
+
     return [x, y]
