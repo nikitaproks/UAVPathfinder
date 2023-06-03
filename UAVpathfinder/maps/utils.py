@@ -53,7 +53,4 @@ def coord_to_cart(
     y = 6371752.3 * (
         math.radians(flip_coord[0]) - math.radians(relative_coord[0])
     )
-    print(" ")
-    print(distance)
-    print([x, y])
     return [x, y]

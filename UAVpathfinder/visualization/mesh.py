@@ -1,13 +1,10 @@
 from typing import Union
 import numpy as np
-from shapely.geometry import Point
-from shapely.geometry.polygon import Polygon
 
 
 from UAVpathfinder.maps.map import Map
 from UAVpathfinder.visualization.render import Render3D
 from UAVpathfinder.visualization.dependencies import (
-    get_points_num,
     rotate_points,
     PlanarPolygon,
 )
@@ -16,7 +13,7 @@ from UAVpathfinder.visualization.dependencies import (
 class Mesh:
     def __init__(self):
         self.vertices = np.empty((0, 3), dtype=np.float64)
-        self.faces = np.empty((0, 3), dtype=np.int32)
+        self.triangles = np.empty((0, 3, 3), dtype=np.float64)
 
     def _create_circle_points(
         self,
@@ -111,38 +108,64 @@ class Mesh:
         resolution: float = 0.1,
     ):
         """Add a 2D polygon to the mesh."""
-
         polygon = PlanarPolygon(vertices)
+        if not polygon.is_valid:
+            return
 
         # polygon.upsample_mesh(resolution)
-        self.add(polygon.vertices_3d, polygon.faces)
+        self.add(polygon.vertices_3d, polygon.triangles_3d)
 
     def add_vertices(self, vertices: np.ndarray):
         self.vertices = np.vstack((self.vertices, vertices))
+        self.vertices = np.unique(self.vertices, axis=0)
 
-    def add_faces(self, faces: np.ndarray):
-        self.faces = np.vstack((self.faces, faces))
+    def add_triangles(self, triangles: np.ndarray):
+        self.triangles = np.vstack((self.triangles, triangles))
+        self.triangles = np.unique(self.triangles, axis=0)
 
     def add(self, vertices: np.ndarray, faces: np.ndarray):
+        self.add_triangles(faces)
         self.add_vertices(vertices)
-        self.add_faces(faces)
+
+    def get_data(self):
+        vertices = np.unique(self.triangles.reshape(-1, 3), axis=0)
+        _, faces = np.unique(
+            self.triangles.reshape(-1, 3), axis=0, return_inverse=True
+        )
+        faces = faces.reshape(self.triangles.shape[:-1])
+        back_faces = faces[:, ::-1]
+        all_faces = np.concatenate((faces, back_faces), axis=0)
+        return vertices, all_faces
+
+    def get_bounding_box(self):
+        min_x = np.min(self.vertices[:, 0])
+        min_y = np.min(self.vertices[:, 1])
+        min_z = np.min(self.vertices[:, 2])
+        max_x = np.max(self.vertices[:, 0])
+        max_y = np.max(self.vertices[:, 1])
+        max_z = np.max(self.vertices[:, 2])
+        return [
+            [min_x, min_y, min_z],
+            [max_x, max_y, max_z],
+        ]
 
 
 render = Render3D()
 mesh = Mesh()
 new_map = Map(
-    start_coord=[48.15454749016991, 11.544871334811818],
-    end_coord=[48.15633324537993, 11.545783285821432],
+    start_coord=[40.734932, -74.011355],
+    end_coord=[40.707568, -73.985169],
 )
-# mesh.create_cylinder([0, 0, 0], [0, 0, 10], 1, resolution=0.01)
+from tqdm import tqdm
 
-# buildings = new_map.generate_building_faces()
-buildings = [[[[0, 0, 0], [0, 0, 10], [0, 10, 10], [0, 10, 0]]]]
-for building in buildings:
+buildings = new_map.generate_building_faces()
+for building in tqdm(buildings):
     for face in building:
-        mesh.add_2d_polygon(face, resolution=1)
+        mesh.add_2d_polygon(face, resolution=10)
+vertices, faces = mesh.get_data()
+bounding_box = mesh.get_bounding_box()
 
-print(mesh.vertices)
-print(mesh.faces)
-render.create_triangular_mesh(mesh.vertices, mesh.faces)
+
+render.create_triangular_mesh(vertices, faces)
+render.create_floor_mesh(bounding_box)
 render.visualize()
