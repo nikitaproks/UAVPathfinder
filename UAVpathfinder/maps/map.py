@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+from utils import coord_to_cart
 
 
 class Map(BaseModel):
@@ -101,7 +102,8 @@ class Map(BaseModel):
         return self.avg_known_building_height()
 
     def generate_building_faces(self) -> List[List[List[float]]]:
-        faces = []
+        buildings = []
+        min_ref_pt = self.generate_bbox()[0]
 
         # Iterate over buildings
         for _, building in self.get_2d_buildings_data().iterrows():
@@ -113,40 +115,35 @@ class Map(BaseModel):
             # Points are ignored, only plygons are taken.
             if footprint.geom_type == "Polygon":
                 base_coord = footprint.exterior.coords
-                # Create vertices for the building's 3D face
                 building_faces = [
-                    [[coord[0], coord[1], 0] for coord in base_coord],
-                    [[coord[0], coord[1], height] for coord in base_coord],
+                    [coord_to_cart(min_ref_pt, coord) + [0.0] for coord in base_coord],
+                    [
+                        coord_to_cart(min_ref_pt, coord) + [height]
+                        for coord in base_coord
+                    ],
                 ]
 
                 for idx, point in enumerate(base_coord):
                     if idx == len(base_coord) - 1:
                         building_faces.append(
                             [
-                                [base_coord[0][0], base_coord[1][0], 0],
-                                [base_coord[0][0], base_coord[1][0], height],
-                                [base_coord[-1][0], base_coord[-1][1], 0],
-                                [base_coord[-1][0], base_coord[-1][1], height],
+                                coord_to_cart(min_ref_pt, base_coord[0]) + [0.0],
+                                coord_to_cart(min_ref_pt, base_coord[0]) + [height],
+                                coord_to_cart(min_ref_pt, base_coord[-1]) + [height],
+                                coord_to_cart(min_ref_pt, base_coord[-1]) + [0.0],
                             ]
                         )
                     else:
                         building_faces.append(
                             [
-                                [point[0], point[1], 0],
-                                [point[0], point[1], height],
-                                [
-                                    base_coord[idx + 1][0],
-                                    base_coord[idx + 1][1],
-                                    0,
-                                ],
-                                [
-                                    base_coord[idx + 1][0],
-                                    base_coord[idx + 1][1],
-                                    height,
-                                ],
+                                coord_to_cart(min_ref_pt, point).extend([0.0]),
+                                coord_to_cart(min_ref_pt, point) + [height],
+                                coord_to_cart(min_ref_pt, base_coord[idx + 1])
+                                + [height],
+                                coord_to_cart(min_ref_pt, base_coord[idx + 1]) + [0.0],
                             ]
                         )
 
-                faces.append(building_faces)
+                buildings.append(building_faces)
 
-        return np.array(faces, dtype=object)
+        return np.array(buildings, dtype=object)

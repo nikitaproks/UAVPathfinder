@@ -9,9 +9,17 @@ new_map = Map(
 )
 
 new_graph = FreeSpaceGraph(
-    xy_resolution=1, z_steps=3, building_map=new_map, nogo_zones=[0]  # in meters
+    x_resolution=10,
+    y_resolution=10,
+    z_steps=3,
+    building_map=new_map,
+    nogo_zones=[0],  # in meters
 )
 
+new_graph.plot_network_gid()
+
+
+"""
 
 import networkx as nx
 import matplotlib.pyplot as plt
@@ -19,7 +27,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 
 
-def generate_equidistant_graph(bbox, resolution, num_layers, layer_distance):
+def generate_equidistant_graph(bbox, resolution, num_layers):
     G = nx.Graph()
 
     # Generate nodes in the bounding box
@@ -59,10 +67,11 @@ layer_distance = 1  # Spacial distance between z-axis layers
 
 # Generate the graph
 G = generate_equidistant_graph(bbox, resolution, num_layers, layer_distance)
-pos = nx.spring_layout(G, dim=3, seed=779)
+pos = nx.spring_layout(G, dim=3, seed=779, pos=None)
+print(G.nodes())
 # Extract node and edge positions from the layout
-node_xyz = np.array([pos[v] for v in sorted(G)])
-edge_xyz = np.array([(pos[u], pos[v]) for u, v in G.edges()])
+node_xyz = np.array([np.array(v) for v in G])
+edge_xyz = np.array([(np.array(u), np.array(v)) for u, v in G.edges()])
 
 # Create the 3D figure
 fig = plt.figure()
@@ -77,9 +86,8 @@ for vizedge in edge_xyz:
 
 
 def _format_axes(ax):
-    """Visualization options for the 3D axes."""
     # Turn gridlines off
-    ax.grid(False)
+    ax.grid(True)
     # Suppress tick labels
     for dim in (ax.xaxis, ax.yaxis, ax.zaxis):
         dim.set_ticks([])
@@ -92,3 +100,4 @@ def _format_axes(ax):
 _format_axes(ax)
 fig.tight_layout()
 plt.show()
+"""
