@@ -9,9 +9,9 @@ new_map = Map(
 )
 
 new_graph = FreeSpaceGraph(
-    x_resolution=10,
-    y_resolution=10,
-    z_steps=3,
+    x_resolution=30,
+    y_resolution=30,
+    z_steps=5,
     building_map=new_map,
     nogo_zones=[0],  # in meters
 )
