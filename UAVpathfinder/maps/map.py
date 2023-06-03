@@ -12,7 +12,7 @@ class Map(BaseModel):
     start_coord: List[float]
     end_coord: List[float]
     level_height = 2.5  # height of a building level
-    buffer = 0.001
+    buffer = 0.0005
 
     def generate_bbox(self) -> List[List[float]]:
         """
@@ -93,7 +93,7 @@ class Map(BaseModel):
         faces = []
 
         # Iterate over buildings
-        for i, building in self.get_2d_buildings_data().iterrows():
+        for _, building in self.get_2d_buildings_data().iterrows():
             # Extract building height and footprint
             height = self.get_building_height(building)
             footprint = building.geometry
@@ -138,4 +138,4 @@ class Map(BaseModel):
 
                 faces.append(building_faces)
 
-        return faces
+        return np.array(faces, dtype=object)
