@@ -1,11 +1,9 @@
 # from UAVpathfinder.maps import map
-import map
+from map import Map
 
-new_map = map.Map(
-    start_coord=[48.16027671693242, 11.541244989434498],
-    end_coord=[48.14533143268084, 11.564247612547494],
-    xy_resolution=0.25,  # in meters
-    z_resolution=3.0,
+new_map = Map(
+    start_coord=[48.14717458684, 11.543753585147323],
+    end_coord=[48.14869704375871, 11.542849202512738],
 )
 
 new_map.plot_building_2D()
