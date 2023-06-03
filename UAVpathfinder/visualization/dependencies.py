@@ -1,5 +1,6 @@
-from typing import Optional
 import numpy as np
+from scipy.spatial import Delaunay
+import trimesh
 
 
 def get_points_num(number: float, resolution: int) -> int:
@@ -51,32 +52,101 @@ def rotate_points(
     return points
 
 
-def project_3d_to_2d(points_3d):
-    points_3d = np.array(points_3d)
-    points_2d = []
-    flat_dim = None
-    # Identify the dimension(s) with exactly two distinct values
-    for idx in range(points_3d.shape[1]):
-        if len(np.unique(points_3d[:, idx])) <= 2:
-            flat_dim = idx
-            break
+class PlanarPolygon:
+    def __init__(self, vertices: list[list[float]]):
+        vertices = np.array(vertices)
+        if not self.is_planar(vertices):
+            raise ValueError(
+                "The vertices do not form a flat 3D polygon"
+            )
+        self.vertices_3d = vertices
+        self.vertices_2d = self.project_to_2d(vertices)
+        self.faces = self.get_triangular_faces(self.vertices_2d)
 
-    if flat_dim is None:
-        raise ValueError("The points do not form a flat 3D polygon")
+    def is_planar(self, vertices):
+        if len(vertices) < 3:
+            return True  # If there are less than 3 vertices, then it's always planar
 
-    # Project the points to 2D
-    for point in points_3d:
-        points_2d.append(
-            [coord for i, coord in enumerate(point) if i != flat_dim]
+        # Take three points, form two vectors, compute their cross product
+        v1 = np.subtract(vertices[1], vertices[0])
+        v2 = np.subtract(vertices[2], vertices[0])
+        normal = np.cross(v1, v2)
+
+        for v in vertices[3:]:
+            # Compute vector from one of the original points to this one
+            v3 = np.subtract(v, vertices[0])
+            # Compute dot product of this vector with the normal - should be zero
+            # if the point lies in the same plane, within a small tolerance
+            if abs(np.dot(normal, v3)) > 1e-6:
+                return False
+
+        # If we get through the entire loop without finding a non-coplanar point, it's planar
+        return True
+
+    def project_to_2d(self, vertices):
+        v1 = np.subtract(vertices[1], vertices[0])
+        normal = np.cross(v1, np.subtract(vertices[2], vertices[0]))
+        self.v2 = np.cross(normal, v1)
+
+        basis = np.array(
+            [
+                v1 / np.linalg.norm(v1),
+                self.v2 / np.linalg.norm(self.v2),
+            ]
+        )
+        self.basis = basis
+
+        return np.dot(vertices - vertices[0], basis.T)
+
+    def project_to_3d(self, vertices_2d):
+        return vertices_2d @ self.basis + self.vertices_3d[0]
+
+    def upsample_mesh(self, resolution: int):
+        mesh = trimesh.Trimesh(
+            vertices=self.vertices_2d, faces=self.faces
         )
 
-    return np.array(points_2d), flat_dim
+        avg_edge_length = self.get_average_edge_length()
+        subdivision_levels = int(avg_edge_length / resolution)
 
+        for _ in range(subdivision_levels):
+            mesh = mesh.subdivide()
 
-def project_2d_to_3d(
-    points_2d, polygon_flat_dim, const_value
-) -> np.ndarray:
-    points_3d = np.insert(
-        points_2d, polygon_flat_dim, const_value, axis=1
-    )
-    return points_3d
+        self.vertices_2d = mesh.vertices
+        self.faces = mesh.faces
+        self.vertices_3d = self.project_to_3d(self.vertices_2d)
+
+    def triangulate_2D(self, vertices_2d):
+        # Perform Delaunay triangulation on the polygon
+        triangulation = Delaunay(vertices_2d)
+        # Extract the triangles from the triangulation result
+        triangles_indices = triangulation.simplices
+        return triangles_indices
+
+    def get_triangular_faces(self, vertices_2d):
+        triangles_indices = self.triangulate_2D(vertices_2d)
+        return triangles_indices
+
+    def get_average_edge_length(self):
+        total_length = 0.0
+        num_edges = 0
+
+        for face in self.faces:
+            # Get the vertices of the face
+            v1, v2, v3 = self.vertices_2d[face]
+
+            # Calculate the lengths of the edges
+            edge_lengths = [
+                np.linalg.norm(v2 - v1),
+                np.linalg.norm(v3 - v2),
+                np.linalg.norm(v1 - v3),
+            ]
+
+            # Add up the lengths of the edges
+            total_length += sum(edge_lengths)
+            num_edges += 3
+
+        # Calculate the average edge length
+        average_length = total_length / num_edges
+
+        return average_length

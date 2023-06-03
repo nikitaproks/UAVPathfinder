@@ -2,7 +2,9 @@ from typing import List
 import math
 
 
-def haversine_distance(coord_1: List[float], coord_2: List[float]) -> float:
+def haversine_distance(
+    coord_1: List[float], coord_2: List[float]
+) -> float:
     """
     Calculate the Haversine distance between two coordinates to help determine the
     initial grid.
@@ -24,7 +26,9 @@ def haversine_distance(coord_1: List[float], coord_2: List[float]) -> float:
     dlat = lat2_rad - lat1_rad
     a = (
         math.sin(dlat / 2) ** 2
-        + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(dlon / 2) ** 2
+        + math.cos(lat1_rad)
+        * math.cos(lat2_rad)
+        * math.sin(dlon / 2) ** 2
     )
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     distance = 6371.1370 * c * 1000  # Earth's radius in kilometers
@@ -32,11 +36,17 @@ def haversine_distance(coord_1: List[float], coord_2: List[float]) -> float:
     return abs(distance)
 
 
-def coord_to_cart(relative_coord: List[float], coord: List[float]) -> List[float]:
+def coord_to_cart(
+    relative_coord: List[float], coord: List[float]
+) -> List[float]:
     # coord and relative coord are flipped!
-    distance = haversine_distance((coord[1], coord[0]), relative_coord)
-    print(coord)
-    x = distance * math.cos(math.radians(coord[0])) * (coord[1] - relative_coord[0])
+    distance = haversine_distance(
+        (coord[1], coord[0]), relative_coord
+    )
+    x = (
+        distance
+        * math.cos(math.radians(coord[0]))
+        * (coord[1] - relative_coord[0])
+    )
     y = distance * (coord[0] - relative_coord[1])
-    print(distance)
     return [x, y]

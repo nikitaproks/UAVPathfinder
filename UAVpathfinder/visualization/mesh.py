@@ -9,8 +9,7 @@ from UAVpathfinder.visualization.render import Render3D
 from UAVpathfinder.visualization.dependencies import (
     get_points_num,
     rotate_points,
-    project_3d_to_2d,
-    project_2d_to_3d,
+    PlanarPolygon,
 )
 
 
@@ -103,56 +102,30 @@ class Mesh:
         body_points = rotate_points(body_points, axis_vector)
 
         points: np.ndarray = body_points
-        mesh.add(points)
+        mesh.add_vertices(points)
         return points
 
     def add_2d_polygon(
         self,
-        boundary_points_3d: list[list[float]],
+        vertices: list[list[float]],
         resolution: float = 0.1,
     ):
         """Add a 2D polygon to the mesh."""
 
-        boundary_points_3d = np.array(boundary_points_3d) / 10
-        boundary_points_2d, polygon_flat_dim = project_3d_to_2d(
-            boundary_points_3d
-        )
+        polygon = PlanarPolygon(vertices)
 
-        polygon_2d = Polygon(boundary_points_2d)
-        flat_dim_value = boundary_points_3d[0, polygon_flat_dim]
+        # polygon.upsample_mesh(resolution)
+        self.add(polygon.vertices_3d, polygon.faces)
 
-        # Bounding box
-        min_x, min_y, max_x, max_y = polygon_2d.bounds
-        # Generate points
-        grid_points_2d = []
-        print(boundary_points_3d)
-        print(min_x, min_y, max_x, max_y)
-        for x in np.arange(min_x, max_x, resolution):
-            for y in np.arange(min_y, max_y, resolution):
-                point = Point(x, y)
-                if polygon_2d.contains(point):
-                    grid_points_2d.append((x, y))
-
-        polygon_points_2d = np.empty((0, 2), dtype=np.float64)
-
-        if len(grid_points_2d) != 0:
-            polygon_points_2d = np.vstack(
-                (polygon_points_2d, grid_points_2d)
-            )
-
-        polygon_points_2d = np.vstack(
-            (polygon_points_2d, boundary_points_2d)
-        )
-
-        polygon_points_3d = project_2d_to_3d(
-            polygon_points_2d, polygon_flat_dim, flat_dim_value
-        )
-        self.add(polygon_points_3d)
-        print("Done")
-        return polygon_points_3d
-
-    def add(self, vertices: np.ndarray):
+    def add_vertices(self, vertices: np.ndarray):
         self.vertices = np.vstack((self.vertices, vertices))
+
+    def add_faces(self, faces: np.ndarray):
+        self.faces = np.vstack((self.faces, faces))
+
+    def add(self, vertices: np.ndarray, faces: np.ndarray):
+        self.add_vertices(vertices)
+        self.add_faces(faces)
 
 
 render = Render3D()
@@ -163,12 +136,13 @@ new_map = Map(
 )
 # mesh.create_cylinder([0, 0, 0], [0, 0, 10], 1, resolution=0.01)
 
-buildings = new_map.generate_building_faces()
-from tqdm import tqdm
-
+# buildings = new_map.generate_building_faces()
+buildings = [[[[0, 0, 0], [0, 0, 10], [0, 10, 10], [0, 10, 0]]]]
 for building in buildings:
-    for faces in building:
-        mesh.add_2d_polygon(faces, resolution=0.0001)
+    for face in building:
+        mesh.add_2d_polygon(face, resolution=1)
 
-render.create_point_map(mesh.vertices)
+print(mesh.vertices)
+print(mesh.faces)
+render.create_triangular_mesh(mesh.vertices, mesh.faces)
 render.visualize()
