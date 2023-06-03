@@ -1,4 +1,4 @@
-from typing import List, Union
+from typing import List
 from pydantic import BaseModel
 import networkx as nx
 import osmnx as ox
@@ -33,7 +33,7 @@ class Map(BaseModel):
         ]  # [min_lat, min_lon], [max_lat, max_lon]
         return bbox_vals
 
-    def get_2D_building_graph(self) -> nx.MultiDiGraph:
+    def get_2d_building_graph(self) -> nx.MultiDiGraph:
         """
         Return the raw network graph of the buildings given a bounding box from OSMnx,
         """
@@ -60,10 +60,10 @@ class Map(BaseModel):
         )
         return buildings
 
-    def plot_building_2D(self) -> None:
+    def plot_building_2d(self) -> None:
         # Plot the graph
         ox.plot_graph(
-            self.get_2D_building_graph(),
+            self.get_2d_building_graph(),
         )
         plt.show()
 
@@ -82,6 +82,17 @@ class Map(BaseModel):
         building_levels = building_levels.astype(float)
         average_height = np.average(building_levels * self.level_height)
         return average_height
+
+    def max_known_building_height(self) -> float:
+        """
+        Calculate the maximum height of known buildings.
+
+        Returns:
+            float: Maximum height of known buildings in meters.
+        """
+        building_levels = self.get_2d_buildings_data()["building:levels"].dropna()
+        max_height = max(building_levels.astype(float)) * self.level_height
+        return max_height
 
     def get_building_height(self, building: gpd.GeoDataFrame) -> float:
         # TODO: what does it mean when a building height is NaN
