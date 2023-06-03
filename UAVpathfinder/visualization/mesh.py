@@ -1,5 +1,6 @@
 from typing import Union
 import numpy as np
+from tqdm import tqdm
 
 
 from UAVpathfinder.maps.map import Map
@@ -102,29 +103,22 @@ class Mesh:
         mesh.add_vertices(points)
         return points
 
-    def add_2d_polygon(
-        self,
-        vertices: list[list[float]],
-        resolution: float = 0.1,
-    ):
+    def add_2d_polygon(self, vertices: list[list[float]]):
         """Add a 2D polygon to the mesh."""
         polygon = PlanarPolygon(vertices)
         if not polygon.is_valid:
             return
-
-        # polygon.upsample_mesh(resolution)
+        self.polygon = polygon
         self.add(polygon.vertices_3d, polygon.triangles_3d)
 
     def add_vertices(self, vertices: np.ndarray):
         self.vertices = np.vstack((self.vertices, vertices))
-        self.vertices = np.unique(self.vertices, axis=0)
 
     def add_triangles(self, triangles: np.ndarray):
         self.triangles = np.vstack((self.triangles, triangles))
-        self.triangles = np.unique(self.triangles, axis=0)
 
-    def add(self, vertices: np.ndarray, faces: np.ndarray):
-        self.add_triangles(faces)
+    def add(self, vertices: np.ndarray, triangles: np.ndarray):
+        self.add_triangles(triangles)
         self.add_vertices(vertices)
 
     def get_data(self):
@@ -150,22 +144,22 @@ class Mesh:
         ]
 
 
-render = Render3D()
-mesh = Mesh()
-new_map = Map(
-    start_coord=[25.203884, 55.265894],
-    end_coord=[25.192079, 55.285721],
-)
-from tqdm import tqdm
+if __name__ == "__main__":
+    render = Render3D()
+    mesh = Mesh()
+    new_map = Map(
+        start_coord=[25.203884, 55.265894],
+        end_coord=[25.192079, 55.270721],
+    )
 
-buildings = new_map.generate_building_faces()
-for building in tqdm(buildings):
-    for face in building:
-        mesh.add_2d_polygon(face, resolution=10)
-vertices, faces = mesh.get_data()
-bounding_box = mesh.get_bounding_box()
+    buildings = new_map.generate_building_faces()
+    for building in tqdm(buildings):
+        counter = 1
+        for face in building:
+            mesh.add_2d_polygon(face)
+    vertices, faces = mesh.get_data()
+    bounding_box = mesh.get_bounding_box()
 
-
-render.create_triangular_mesh(vertices, faces)
-render.create_floor_mesh(bounding_box)
-render.visualize()
+    render.create_triangular_mesh(vertices, faces)
+    render.create_floor_mesh(bounding_box)
+    render.visualize()

@@ -1,12 +1,13 @@
 from typing import List
 from pydantic import BaseModel
+from tqdm import tqdm
 import networkx as nx
 import osmnx as ox
 import matplotlib.pyplot as plt
 import geopandas as gpd
 import numpy as np
 import pandas as pd
-from map_utils import coord_to_cart
+from UAVpathfinder.maps.map_utils import coord_to_cart
 
 
 class Map(BaseModel):
@@ -283,75 +284,92 @@ class Map(BaseModel):
         try:
             buildings = []
             min_ref_pt = self.generate_bbox()[0]
-
             # Iterate over buildings
             for (
                 _,
                 building,
             ) in self.get_2d_buildings_data().iterrows():
                 height = self.get_building_height(building)
-                footprint = building.geometry
 
-                # Check if footprint is a polygon
-                # Points are ignored, only plygons are taken.
-                if footprint.geom_type == "Polygon":
-                    base_coord = footprint.exterior.coords
-                    building_faces = [
-                        [
-                            coord_to_cart(min_ref_pt, coord) + [0.0]
-                            for coord in base_coord
-                        ],
+                if building.geometry.geom_type == "Polygon":
+                    base_coord = building.geometry.exterior.coords
+                    base_coord_cart = np.array(
                         [
                             coord_to_cart(min_ref_pt, coord)
-                            + [height]
                             for coord in base_coord
-                        ],
+                        ]
+                    )
+
+                    building_faces = [
+                        np.hstack(
+                            (
+                                base_coord_cart,
+                                np.full(
+                                    (base_coord_cart.shape[0], 1),
+                                    0,
+                                ),
+                            )
+                        ),
+                        np.hstack(
+                            (
+                                base_coord_cart,
+                                np.full(
+                                    (base_coord_cart.shape[0], 1),
+                                    height,
+                                ),
+                            )
+                        ),
                     ]
 
-                    for idx, point in enumerate(base_coord):
-                        if idx == len(base_coord) - 1:
-                            building_faces.append(
-                                [
-                                    coord_to_cart(
-                                        min_ref_pt, base_coord[0]
-                                    )
-                                    + [0.0],
-                                    coord_to_cart(
-                                        min_ref_pt, base_coord[0]
-                                    )
-                                    + [height],
-                                    coord_to_cart(
-                                        min_ref_pt, base_coord[-1]
-                                    )
-                                    + [height],
-                                    coord_to_cart(
-                                        min_ref_pt, base_coord[-1]
-                                    )
-                                    + [0.0],
-                                ]
+                    for idx in range(len(base_coord) - 1):
+                        building_faces.append(
+                            np.vstack(
+                                (
+                                    np.hstack(
+                                        (
+                                            base_coord_cart[idx],
+                                            0.0,
+                                        )
+                                    ),
+                                    np.hstack(
+                                        (
+                                            base_coord_cart[idx],
+                                            height,
+                                        )
+                                    ),
+                                    np.hstack(
+                                        (
+                                            base_coord_cart[idx + 1],
+                                            height,
+                                        )
+                                    ),
+                                    np.hstack(
+                                        (
+                                            base_coord_cart[idx + 1],
+                                            0.0,
+                                        )
+                                    ),
+                                )
                             )
-                        else:
-                            building_faces.append(
-                                [
-                                    coord_to_cart(min_ref_pt, point)
-                                    + [0.0],
-                                    coord_to_cart(min_ref_pt, point)
-                                    + [height],
-                                    coord_to_cart(
-                                        min_ref_pt,
-                                        base_coord[idx + 1],
-                                    )
-                                    + [height],
-                                    coord_to_cart(
-                                        min_ref_pt,
-                                        base_coord[idx + 1],
-                                    )
-                                    + [0.0],
-                                ]
+                        )
+
+                    # Handle the last face
+                    building_faces.append(
+                        np.vstack(
+                            (
+                                np.hstack((base_coord_cart[0], 0.0)),
+                                np.hstack(
+                                    (base_coord_cart[0], height)
+                                ),
+                                np.hstack(
+                                    (base_coord_cart[-1], height)
+                                ),
+                                np.hstack((base_coord_cart[-1], 0.0)),
                             )
+                        )
+                    )
 
                     buildings.append(building_faces)
-
             return np.array(buildings, dtype=object)
         except Exception as e:
             raise OSError("Error generating building faces.") from e
