@@ -5,9 +5,8 @@ class Render3D:
     def __init__(self):
         self.mesh = o3d.geometry.PointCloud()
 
-    def create_mesh(self, vertices, faces):
+    def create_point_map(self, vertices):
         self.mesh.points = o3d.utility.Vector3dVector(vertices)
-        # self.mesh.triangles = o3d.utility.Vector3iVector(faces)
         self.mesh.paint_uniform_color([0.1, 0.1, 0.7])
 
     def visualize(self):
