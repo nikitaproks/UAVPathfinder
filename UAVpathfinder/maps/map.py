@@ -54,40 +54,26 @@ class Map(BaseModel):
         )
         # ymax, ymin, xmin, xmax
 
-    def plot_building(self) -> None:
-        # Plot the graph
-        ox.plot_graph(
-            self.get_2D_building_network(),
-        )
-
-        plt.show()
-
-        building_series = gpd.GeoSeries(buildings.geometry)
-
-        building_series.plot()
-
-        plt.show()
-
-
     def get_2d_buildings_data(self) -> gpd.GeoDataFrame:
         box = self.generate_bbox()
         # Get buildings within the bounding box
         buildings = ox.geometries_from_bbox(
             box[1][0], box[0][0], box[0][1], box[1][1], tags={"building": True}
         )
-
-        # Convert the buildings GeoDataFrame to a GeoSeries
-        # building_series = gpd.GeoSeries(buildings.geometry)
-
-        # Plot the buildings
-        # building_series.plot()
-
-        # Show the plot
-        # plt.show()
-
         return buildings
 
-    def avg_known_building_heights(self) -> float:
+    def plot_building_2D(self) -> None:
+        # Plot the graph
+        ox.plot_graph(
+            self.get_2D_building_graph(),
+        )
+        plt.show()
+
+        # building_series = gpd.GeoSeries(self.get_2d_buildings_data.geometry)
+        # building_series.plot()
+        # plt.show()
+
+    def avg_known_building_height(self) -> float:
         """
         Calculate the average height of known buildings based on their heights and level heights.
 
@@ -103,9 +89,9 @@ class Map(BaseModel):
         # TODO: what does it mean when a building height is NaN
         if not pd.isna(building["building:levels"]):
             return float(building["building:levels"]) * self.level_height
-        return self.avg_known_building_heights()
+        return self.avg_known_building_height()
 
-    def generate_building_faces(self) ->:
+    def generate_building_faces(self) -> np.ndarray:
         # Initialize empty lists for vertices and faces
         faces = []
 
@@ -114,11 +100,10 @@ class Map(BaseModel):
             # Extract building height and footprint
             height = self.get_building_height(building)
             footprint = building.geometry
-            base_coord = footprint.exterior.coords
 
             # Check if footprint is a polygon
-            building_faces = []
             if footprint.geom_type == "Polygon":
+                base_coord = footprint.exterior.coords
                 # Create vertices for the building's 3D face
                 building_faces = np.array(
                     [
@@ -129,7 +114,7 @@ class Map(BaseModel):
 
                 for idx, point in enumerate(base_coord):
                     if idx == len(base_coord) - 1:
-                        np.append(
+                        building_faces = np.append(
                             building_faces,
                             np.array(
                                 [
@@ -141,7 +126,7 @@ class Map(BaseModel):
                             ),
                         )
                     else:
-                        np.append(
+                        building_faces = np.append(
                             building_faces,
                             np.array(
                                 [
@@ -156,10 +141,10 @@ class Map(BaseModel):
                                 ]
                             ),
                         )
-            if i == 0:
-                faces = np.array(building_faces)
-            else:
-                np.append(faces, np.array(building_faces))
+                if i == 0:
+                    faces = np.array(building_faces)
+                else:
+                    faces = np.append(faces, np.array(building_faces))
             # elif footprint.geom_type == 'Point':
             # For points, add a single vertex at the location with the specified height
             # x, y = footprint.coords[0][0], footprint.coords[0][1]
