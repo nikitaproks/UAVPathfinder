@@ -136,7 +136,7 @@ class Map(BaseModel):
                     else:
                         building_faces.append(
                             [
-                                coord_to_cart(min_ref_pt, point).extend([0.0]),
+                                coord_to_cart(min_ref_pt, point) + [0.0],
                                 coord_to_cart(min_ref_pt, point) + [height],
                                 coord_to_cart(min_ref_pt, base_coord[idx + 1])
                                 + [height],
