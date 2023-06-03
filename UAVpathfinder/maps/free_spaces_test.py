@@ -16,4 +16,4 @@ new_graph = FreeSpaceGraph(
     nogo_zones=[0],  # in meters
 )
 
-new_graph.plot_network_gid()
+new_graph.plot_network_grid()
