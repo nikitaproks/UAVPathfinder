@@ -1,6 +1,6 @@
 from map import Map
-from utils import coord_to_cart
-from utils import haversine_distance
+from utils import coord_to_cart, haversine_distance
+
 
 print(
     haversine_distance(
