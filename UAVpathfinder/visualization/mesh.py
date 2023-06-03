@@ -1,7 +1,17 @@
 from typing import Union
 import numpy as np
-from shapely.geometry import Polygon, LineString
-from UAVpathfinder.visualization import Render3D
+from shapely.geometry import Point
+from shapely.geometry.polygon import Polygon
+
+
+from UAVpathfinder.maps.map import Map
+from UAVpathfinder.visualization.render import Render3D
+from UAVpathfinder.visualization.dependencies import (
+    get_points_num,
+    rotate_points,
+    project_3d_to_2d,
+    project_2d_to_3d,
+)
 
 
 class Mesh:
@@ -9,65 +19,16 @@ class Mesh:
         self.vertices = np.empty((0, 3), dtype=np.float64)
         self.faces = np.empty((0, 3), dtype=np.int32)
 
-    def _get_points_num(self, number: float, resolution: int) -> int:
-        """Calculate the number of points in a circle mesh."""
-        points_number: int = int(round(resolution * number))
-        if points_number < 3:
-            raise ValueError("Resolution too low")
-        return points_number
-
-    def _rotation_matrix(self, axis, theta: np.ndarray) -> np.ndarray:
-        """Return the rotation matrix associated with counterclockwise rotation about
-        the given axis by theta radians."""
-        axis = np.asarray(axis)
-        axis = axis / np.linalg.norm(axis)
-        a = np.cos(theta / 2.0)
-        b, c, d = -axis * np.sin(theta / 2.0)
-        return np.array(
-            [
-                [
-                    a * a + b * b - c * c - d * d,
-                    2 * (b * c - a * d),
-                    2 * (b * d + a * c),
-                ],
-                [
-                    2 * (b * c + a * d),
-                    a * a + c * c - b * b - d * d,
-                    2 * (c * d - a * b),
-                ],
-                [
-                    2 * (b * d - a * c),
-                    2 * (c * d + a * b),
-                    a * a + d * d - b * b - c * c,
-                ],
-            ],
-            dtype=np.float64,
-        )
-
-    def _rotate_points(
-        self, points: np.ndarray, axis_vector: np.ndarray
-    ) -> np.ndarray:
-        # Rotate points to align with axis_vector
-        rot_axis = np.cross([0, 0, 1], axis_vector)
-        if (
-            np.linalg.norm(rot_axis) > 1e-6
-        ):  # if not already aligned...
-            rot_angle = np.arccos(np.dot([0, 0, 1], axis_vector))
-            rot_matrix = self._rotation_matrix(rot_axis, rot_angle)
-            points = np.dot(points, rot_matrix)
-        return points
-
     def _create_circle_points(
         self,
         center: Union[list, np.ndarray],
         radius: float,
-        resolution: int = 20,
+        resolution: float = 0.1,
     ) -> np.ndarray:
         """Create a circle mesh with a given radius and resolution."""
         center = np.array(center, dtype=np.float64)
-        radius_points = self._get_points_num(radius, resolution)
-        x = np.linspace(-radius, radius, radius_points)
-        y = np.linspace(-radius, radius, radius_points)
+        x = np.arange(-radius, radius, resolution)
+        y = np.arange(-radius, radius, resolution)
         X, Y = np.meshgrid(x, y)
         Z = np.zeros_like(X)
 
@@ -86,16 +47,13 @@ class Mesh:
         self,
         height: Union[list, np.ndarray],
         radius: float,
-        resolution: int = 20,
+        resolution: float = 0.1,
     ) -> np.ndarray:
         """Create a cylinder mesh with a given radius and resolution."""
-        height_points = self._get_points_num(height, resolution)
 
         # Create cylinder shell
-        theta = np.linspace(
-            0, 2 * np.pi, height_points, dtype=np.float64
-        )
-        z = np.linspace(0, height, height_points, dtype=np.float64)
+        theta = np.arange(0, 2 * np.pi, resolution, dtype=np.float64)
+        z = np.arange(0, height, resolution, dtype=np.float64)
         Theta, Z = np.meshgrid(theta, z)
         x = radius * np.cos(Theta)
         y = radius * np.sin(Theta)
@@ -109,13 +67,12 @@ class Mesh:
         start_point: list[int],
         end_point: list[int],
         radius: float,
-        resolution: int = 20,
+        resolution: float = 0.1,
     ):
         """Create a cylinder mesh between two points."""
 
         # Create empty arrays to store points and faces
         body_points = np.empty((0, 3), dtype=np.float64)
-        body_faces = np.empty((0, 3), dtype=np.int32)
 
         # Convert start and end points to numpy arrays
         start_point = np.array(start_point, dtype=np.float64)
@@ -143,11 +100,56 @@ class Mesh:
         )
 
         # Rotate the points to align with the axis vector
-        body_points = self._rotate_points(body_points, axis_vector)
+        body_points = rotate_points(body_points, axis_vector)
 
         points: np.ndarray = body_points
         mesh.add(points)
         return points
+
+    def add_2d_polygon(
+        self,
+        boundary_points_3d: list[list[float]],
+        resolution: float = 0.1,
+    ):
+        """Add a 2D polygon to the mesh."""
+
+        boundary_points_3d = np.array(boundary_points_3d) / 10
+        boundary_points_2d, polygon_flat_dim = project_3d_to_2d(
+            boundary_points_3d
+        )
+
+        polygon_2d = Polygon(boundary_points_2d)
+        flat_dim_value = boundary_points_3d[0, polygon_flat_dim]
+
+        # Bounding box
+        min_x, min_y, max_x, max_y = polygon_2d.bounds
+        # Generate points
+        grid_points_2d = []
+        print(boundary_points_3d)
+        print(min_x, min_y, max_x, max_y)
+        for x in np.arange(min_x, max_x, resolution):
+            for y in np.arange(min_y, max_y, resolution):
+                point = Point(x, y)
+                if polygon_2d.contains(point):
+                    grid_points_2d.append((x, y))
+
+        polygon_points_2d = np.empty((0, 2), dtype=np.float64)
+
+        if len(grid_points_2d) != 0:
+            polygon_points_2d = np.vstack(
+                (polygon_points_2d, grid_points_2d)
+            )
+
+        polygon_points_2d = np.vstack(
+            (polygon_points_2d, boundary_points_2d)
+        )
+
+        polygon_points_3d = project_2d_to_3d(
+            polygon_points_2d, polygon_flat_dim, flat_dim_value
+        )
+        self.add(polygon_points_3d)
+        print("Done")
+        return polygon_points_3d
 
     def add(self, vertices: np.ndarray):
         self.vertices = np.vstack((self.vertices, vertices))
@@ -155,8 +157,18 @@ class Mesh:
 
 render = Render3D()
 mesh = Mesh()
-points = mesh.create_cylinder(
-    [0, 0, 0], [5, 5, 5], 10, resolution=100
+new_map = Map(
+    start_coord=[48.15454749016991, 11.544871334811818],
+    end_coord=[48.15633324537993, 11.545783285821432],
 )
+# mesh.create_cylinder([0, 0, 0], [0, 0, 10], 1, resolution=0.01)
+
+buildings = new_map.generate_building_faces()
+from tqdm import tqdm
+
+for building in buildings:
+    for faces in building:
+        mesh.add_2d_polygon(faces, resolution=0.0001)
+
 render.create_point_map(mesh.vertices)
 render.visualize()

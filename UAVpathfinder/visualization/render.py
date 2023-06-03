@@ -11,12 +11,11 @@ class Render3D:
 
     def visualize(self):
         vis = o3d.visualization.Visualizer()
-        frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-            size=1, origin=[0, 0, 0]
-        )
         vis.create_window()
         vis.add_geometry(self.mesh)
-        vis.add_geometry(frame)
+
+        opt = vis.get_render_option()
+        opt.point_size = 3
 
         # get the view control object and change field of view
         ctr = vis.get_view_control()
