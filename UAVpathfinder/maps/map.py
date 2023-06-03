@@ -11,8 +11,6 @@ import pandas as pd
 class Map(BaseModel):
     start_coord: List[float]
     end_coord: List[float]
-    xy_resolution: float  # in meters
-    z_resolution: float  # in meters
     level_height = 2.5  # height of a building level
     buffer = 0.001
 
@@ -69,9 +67,9 @@ class Map(BaseModel):
         )
         plt.show()
 
-        # building_series = gpd.GeoSeries(self.get_2d_buildings_data.geometry)
-        # building_series.plot()
-        # plt.show()
+        building_series = gpd.GeoSeries(self.get_2d_buildings_data().geometry)
+        building_series.plot()
+        plt.show()
 
     def avg_known_building_height(self) -> float:
         """
@@ -91,8 +89,7 @@ class Map(BaseModel):
             return float(building["building:levels"]) * self.level_height
         return self.avg_known_building_height()
 
-    def generate_building_faces(self) -> np.ndarray:
-        # Initialize empty lists for vertices and faces
+    def generate_building_faces(self) -> List[List[List[float]]]:
         faces = []
 
         # Iterate over buildings
@@ -102,55 +99,43 @@ class Map(BaseModel):
             footprint = building.geometry
 
             # Check if footprint is a polygon
+            # Points are ignored, only plygons are taken.
             if footprint.geom_type == "Polygon":
                 base_coord = footprint.exterior.coords
                 # Create vertices for the building's 3D face
-                building_faces = np.array(
-                    [
-                        [[coord[0], coord[1], 0] for coord in base_coord],
-                        [[coord[0], coord[1], height] for coord in base_coord],
-                    ]
-                )
+                building_faces = [
+                    [[coord[0], coord[1], 0] for coord in base_coord],
+                    [[coord[0], coord[1], height] for coord in base_coord],
+                ]
 
                 for idx, point in enumerate(base_coord):
                     if idx == len(base_coord) - 1:
-                        building_faces = np.append(
-                            building_faces,
-                            np.array(
-                                [
-                                    [base_coord[0][0], base_coord[1][0], 0],
-                                    [base_coord[0][0], base_coord[1][0], height],
-                                    [base_coord[-1][0], base_coord[-1][1], 0],
-                                    [base_coord[-1][0], base_coord[-1][1], height],
-                                ]
-                            ),
+                        building_faces.append(
+                            [
+                                [base_coord[0][0], base_coord[1][0], 0],
+                                [base_coord[0][0], base_coord[1][0], height],
+                                [base_coord[-1][0], base_coord[-1][1], 0],
+                                [base_coord[-1][0], base_coord[-1][1], height],
+                            ]
                         )
                     else:
-                        building_faces = np.append(
-                            building_faces,
-                            np.array(
+                        building_faces.append(
+                            [
+                                [point[0], point[1], 0],
+                                [point[0], point[1], height],
                                 [
-                                    [point[0], point[1], 0],
-                                    [point[0], point[1], height],
-                                    [base_coord[idx + 1][0], base_coord[idx + 1][1], 0],
-                                    [
-                                        base_coord[idx + 1][0],
-                                        base_coord[idx + 1][1],
-                                        height,
-                                    ],
-                                ]
-                            ),
+                                    base_coord[idx + 1][0],
+                                    base_coord[idx + 1][1],
+                                    0,
+                                ],
+                                [
+                                    base_coord[idx + 1][0],
+                                    base_coord[idx + 1][1],
+                                    height,
+                                ],
+                            ]
                         )
-                if i == 0:
-                    faces = np.array(building_faces)
-                else:
-                    faces = np.append(faces, np.array(building_faces))
-            # elif footprint.geom_type == 'Point':
-            # For points, add a single vertex at the location with the specified height
-            # x, y = footprint.coords[0][0], footprint.coords[0][1]
-            # vertex = (x, y, height)
 
-            # Add the vertex to the vertices list
-            # vertices.append(vertex)
+                faces.append(building_faces)
 
         return faces
