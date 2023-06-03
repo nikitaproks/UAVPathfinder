@@ -126,72 +126,84 @@ class Map(BaseModel):
     def generate_building_faces(self) -> List[List[List[float]]]:
         buildings = []
         min_ref_pt = self.generate_bbox()[0]
+        from tqdm import tqdm
 
         # Iterate over buildings
-        for _, building in self.get_2d_buildings_data().iterrows():
-            # Extract building height and footprint
-            height = self.get_building_height(building)
-            footprint = building.geometry
+        with tqdm(
+            total=self.get_2d_buildings_data().size, unit="item"
+        ) as pbar:
+            for (
+                _,
+                building,
+            ) in self.get_2d_buildings_data().iterrows():
+                # Extract building height and footprint
+                height = self.get_building_height(building)
+                footprint = building.geometry
 
-            # Check if footprint is a polygon
-            # Points are ignored, only plygons are taken.
-            if footprint.geom_type == "Polygon":
-                base_coord = footprint.exterior.coords
-                building_faces = [
-                    [
-                        coord_to_cart(min_ref_pt, coord) + [0.0]
-                        for coord in base_coord
-                    ],
-                    [
-                        coord_to_cart(min_ref_pt, coord) + [height]
-                        for coord in base_coord
-                    ],
-                ]
+                # Check if footprint is a polygon
+                # Points are ignored, only plygons are taken.
+                if footprint.geom_type == "Polygon":
+                    base_coord = footprint.exterior.coords
+                    building_faces = [
+                        [
+                            coord_to_cart(min_ref_pt, coord) + [0.0]
+                            for coord in base_coord
+                        ],
+                        [
+                            coord_to_cart(min_ref_pt, coord)
+                            + [height]
+                            for coord in base_coord
+                        ],
+                    ]
 
-                for idx, point in enumerate(base_coord):
-                    if idx == len(base_coord) - 1:
-                        building_faces.append(
-                            [
-                                coord_to_cart(
-                                    min_ref_pt, base_coord[0]
-                                )
-                                + [0.0],
-                                coord_to_cart(
-                                    min_ref_pt, base_coord[0]
-                                )
-                                + [height],
-                                coord_to_cart(
-                                    min_ref_pt, base_coord[-1]
-                                )
-                                + [height],
-                                coord_to_cart(
-                                    min_ref_pt, base_coord[-1]
-                                )
-                                + [0.0],
-                            ]
-                        )
-                    else:
-                        building_faces.append(
-                            [
-                                coord_to_cart(min_ref_pt, point)
-                                + [0.0],
-                                coord_to_cart(min_ref_pt, point)
-                                + [height],
-                                coord_to_cart(
-                                    min_ref_pt, base_coord[idx + 1]
-                                )
-                                + [height],
-                                coord_to_cart(
-                                    min_ref_pt, base_coord[idx + 1]
-                                )
-                                + [height],
-                                coord_to_cart(
-                                    min_ref_pt, base_coord[idx + 1]
-                                )
-                                + [0.0],
-                            ]
-                        )
+                    for idx, point in enumerate(base_coord):
+                        if idx == len(base_coord) - 1:
+                            building_faces.append(
+                                [
+                                    coord_to_cart(
+                                        min_ref_pt, base_coord[0]
+                                    )
+                                    + [0.0],
+                                    coord_to_cart(
+                                        min_ref_pt, base_coord[0]
+                                    )
+                                    + [height],
+                                    coord_to_cart(
+                                        min_ref_pt, base_coord[-1]
+                                    )
+                                    + [height],
+                                    coord_to_cart(
+                                        min_ref_pt, base_coord[-1]
+                                    )
+                                    + [0.0],
+                                ]
+                            )
+                        else:
+                            building_faces.append(
+                                [
+                                    coord_to_cart(min_ref_pt, point)
+                                    + [0.0],
+                                    coord_to_cart(min_ref_pt, point)
+                                    + [height],
+                                    coord_to_cart(
+                                        min_ref_pt,
+                                        base_coord[idx + 1],
+                                    )
+                                    + [height],
+                                    coord_to_cart(
+                                        min_ref_pt,
+                                        base_coord[idx + 1],
+                                    )
+                                    + [height],
+                                    coord_to_cart(
+                                        min_ref_pt,
+                                        base_coord[idx + 1],
+                                    )
+                                    + [0.0],
+                                ]
+                            )
 
-                buildings.append(building_faces)
+                    buildings.append(building_faces)
+                    pbar.update(1)
 
         return np.array(buildings, dtype=object)

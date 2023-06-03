@@ -153,8 +153,8 @@ class Mesh:
 render = Render3D()
 mesh = Mesh()
 new_map = Map(
-    start_coord=[40.734932, -74.011355],
-    end_coord=[40.707568, -73.985169],
+    start_coord=[25.203884, 55.265894],
+    end_coord=[25.192079, 55.285721],
 )
 from tqdm import tqdm
 
