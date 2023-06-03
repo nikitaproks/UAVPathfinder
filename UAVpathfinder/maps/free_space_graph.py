@@ -1,11 +1,11 @@
-from typing import List, Dict
+from typing import List, Dict, Tuple
 import itertools
 from pydantic import BaseModel
 from map import Map
 import networkx as nx
 import matplotlib.pyplot as plt
+import matplotlib.path as mpl_path
 import numpy as np
-from utils import haversine_distance
 
 
 class FreeSpaceGraph(BaseModel):
@@ -16,7 +16,36 @@ class FreeSpaceGraph(BaseModel):
     nogo_zones: list  # placeholders
 
     def get_building_points(self) -> list:
+        """
+        Retrieve the 3D coordinates of building points from the generated building faces.
+
+        This method retrieves the 3D coordinates of building points from the generated building faces.
+        The building faces are obtained from the `generate_building_faces` method of the `building_map` object.
+
+        Returns:
+            list: A list of tuples representing the 3D coordinates of building points.
+                  Each tuple contains the x, y, and z coordinates of a building point.
+
+        Note:
+            This method internally uses the `_unpack_nested_coordinates` function to unpack the nested coordinates
+            obtained from the `generate_building_faces` method.
+
+        Raises:
+            None.
+        """
+
         def _unpack_nested_coordinates(coordinates: list):
+            """
+            Helper function to unpack nested coordinates.
+
+            Recursively unpacks nested coordinates and returns a flattened list.
+
+            Parameters:
+                coordinates (list): A list of nested coordinates.
+
+            Returns:
+                list: A flattened list of coordinates.
+            """
             result = []
             for item in coordinates:
                 if isinstance(item, list):
@@ -30,49 +59,71 @@ class FreeSpaceGraph(BaseModel):
         )
         return zip(*[to_unpack[i : i + 3] for i in range(0, len(to_unpack), 3)])
 
-    def get_distance_steps(self):
-        bbox = self.building_map.generate_bbox()
+    def generate_equidistant_graph(
+        self,
+    ) -> Tuple[nx.Graph, Dict[Tuple[int, int, int], Tuple[float, float, float]]]:
+        """
+        Generate an equidistant 3D graph based on building points for an entire region of buildings.
 
-        x, y, z = self.get_building_points()
+        This method generates an equidistant 3D graph using the building points obtained from the `get_building_points`
+        method. The graph represents the connectivity between neighboring nodes in the x, y, and z directions.
+        Each node in the graph is a 3D coordinate, and the edges represent the connections between neighboring nodes.
 
-        max_y = max(y)
-        max_x = max(x)
-        min_y = min(y)
-        min_x = max(x)
+        Returns:
+            Tuple[nx.Graph, Dict[Tuple[int, int, int], Tuple[float, float, float]]]: A tuple containing the generated graph
+            and the positions of each node in the graph. The graph is represented as an `nx.Graph` object, and the positions
+            are stored in a dictionary where the keys are the node coordinates (x, y, z) and the values are the corresponding
+            Cartesian coordinates (x, y, z).
 
-        x_distance = max_x - min_x
-        y_distance = max_y - min_y
+        Note:
+            The graph generation is based on the specified resolution values (`x_resolution`, `y_resolution`, and `z_steps`)
+            and the maximum known building height obtained from the `max_known_building_height` method of the `building_map`.
 
-        dx = x_distance / self.x_resolution
-        dy = y_distance / self.y_resolution
-        dz = self.building_map.max_known_building_height() / self.z_steps
-
-        return dx, dy, dz
-
-    def generate_equidistant_graph(self):
+        Raises:
+            None.
+        """
         G = nx.Graph()
         pos = {}
 
-        x, y, z = self.get_building_points()
-
-        max_y = max(y)
-        max_x = max(x)
-        min_y = min(y)
-        min_x = min(x)
+        x, y, _ = self.get_building_points()
 
         # node position values
-        x_values = np.linspace(min_x, max_x, self.x_resolution)
-        y_values = np.linspace(min_y, max_y, self.y_resolution)
+        x_values = np.linspace(min(x), max(x), self.x_resolution)
+        y_values = np.linspace(min(y), max(y), self.y_resolution)
         z_values = np.linspace(
             0.0,
             self.building_map.max_known_building_height(),
             self.z_steps,
         )
+        all_building_bases = self.building_map.get_all_building_bases()
+        building_height = self.building_map.get_all_building_heights()
 
-        # node values
-        i_values = np.arange(self.x_resolution).astype(int)
-        j_values = np.arange(self.y_resolution).astype(int)
-        k_values = np.arange(self.z_steps).astype(int)
+        def _is_point_inside_building(coordinates):
+            """
+            Hekper functions that checks if a point (x, y) is inside a closed shape formed by connecting several other
+            points.
+
+            Args:
+                x (float): x-coordinate of the point.
+                y (float): y-coordinate of the point.
+                boundary_points (list): List of points forming the boundary of the shape. The points should be ordered
+                    in a way that connecting them in sequence would form the closed shape.
+
+            Returns:
+                bool: True if the point is inside the shape, False otherwise.
+            """
+            for base_points, building_height in zip(
+                all_building_bases,
+                building_height,
+            ):
+                base_points = [sublist[:-1] for sublist in base_points]
+                path = mpl_path.Path(base_points)
+                if (
+                    path.contains_point((coordinates[0], coordinates[1]))
+                    and coordinates[2] <= building_height
+                ):
+                    return False
+            return True
 
         grid_coordinates = np.transpose(
             [
@@ -82,6 +133,11 @@ class FreeSpaceGraph(BaseModel):
             ]
         )
 
+        # node values
+        i_values = np.arange(self.x_resolution).astype(int)
+        j_values = np.arange(self.y_resolution).astype(int)
+        k_values = np.arange(self.z_steps).astype(int)
+
         node_vals = np.transpose(
             [
                 np.tile(i_values, self.y_resolution * self.z_steps),
@@ -90,7 +146,11 @@ class FreeSpaceGraph(BaseModel):
             ]
         )
         # Map the node coordinates to positions
-        pos = {tuple(node): coord for node, coord in zip(node_vals, grid_coordinates)}
+        pos = {
+            tuple(node): coord
+            for node, coord in zip(node_vals, grid_coordinates)
+            if _is_point_inside_building(coord)
+        }
         for node in pos.keys():
             G.add_node(node)
 
@@ -112,11 +172,30 @@ class FreeSpaceGraph(BaseModel):
                     G.add_edge(node, neighbor)
         return G, pos
 
-    def plot_network_grid(self):
+    def plot_network_grid(self) -> None:
+        """
+        Plot the network grid in a 3D visualization.
+
+        This method generates a 3D visualization of the network grid by plotting the equidistant graph
+        generated from the `generate_equidistant_graph` method. The building points obtained from the
+        `get_building_points` method are also plotted.
+
+        Returns:
+            None.
+
+        Note:
+            - The equidistant graph is generated using the `generate_equidistant_graph` method.
+            - The building points are obtained using the `get_building_points` method.
+            - The plot includes scatter points for the nodes of the equidistant graph and the building points,
+              as well as lines representing the edges of the equidistant graph.
+
+        Raises:
+            None.
+        """
         G, pos = self.generate_equidistant_graph()
         node_xyz = np.array([pos[v] for v in G])
         edge_xyz = np.array([(pos[u], pos[v]) for u, v in G.edges()])
-        print(node_xyz)
+
         # Create the 3D figure
         fig = plt.figure()
         ax = fig.add_subplot(111, projection="3d")
