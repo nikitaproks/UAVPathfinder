@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 import matplotlib.path as mpl_path
 import numpy as np
 import osmnx as ox
-from map import Map
-from map_utils import coord_to_cart
+from UAVpathfinder.maps.map import Map
+from UAVpathfinder.maps.map_utils import coord_to_cart
 
 
 class FreeSpaceGraph(BaseModel):
@@ -61,11 +61,19 @@ class FreeSpaceGraph(BaseModel):
         to_unpack = _unpack_nested_coordinates(
             self.building_map.generate_building_faces()
         )
-        return zip(*[to_unpack[i : i + 3] for i in range(0, len(to_unpack), 3)])
+        return zip(
+            *[
+                to_unpack[i : i + 3]
+                for i in range(0, len(to_unpack), 3)
+            ]
+        )
 
     def generate_equidistant_graph(
         self,
-    ) -> Tuple[nx.Graph, Dict[Tuple[int, int, int], Tuple[float, float, float]]]:
+    ) -> Tuple[
+        nx.Graph,
+        Dict[Tuple[int, int, int], Tuple[float, float, float]],
+    ]:
         """
         Generate an equidistant 3D graph based on building points for an entire region of buildings.
 
@@ -90,19 +98,22 @@ class FreeSpaceGraph(BaseModel):
         pos = {}
 
         x, y, _ = self.get_building_points()
-
+        print(x, y)
         # node position values
         x_values = np.linspace(min(x), max(x), self.x_resolution)
         y_values = np.linspace(min(y), max(y), self.y_resolution)
         z_values = np.linspace(
             0.0,
-            self.building_map.max_known_building_height() + self.height_offset,
+            self.building_map.max_known_building_height()
+            + self.height_offset,
             self.z_steps,
         )
         all_building_bases = np.array(
             self.building_map.get_all_building_bases(), dtype=object
         )
-        building_heights = np.array(self.building_map.get_all_building_heights())
+        building_heights = np.array(
+            self.building_map.get_all_building_heights()
+        )
 
         def _is_point_inside_building(coordinates) -> bool:
             """
@@ -120,7 +131,9 @@ class FreeSpaceGraph(BaseModel):
             """
             coordinates = np.array(coordinates)
 
-            for bases, heights in zip(all_building_bases, building_heights):
+            for bases, heights in zip(
+                all_building_bases, building_heights
+            ):
                 base_points = np.array(bases)[:, :-1]
 
                 # Create the path object outside the loop
@@ -131,7 +144,9 @@ class FreeSpaceGraph(BaseModel):
                 height_check = coordinates[2] <= heights
 
                 # Combine the conditions using logical AND
-                conditions = np.logical_and(contains_point, height_check)
+                conditions = np.logical_and(
+                    contains_point, height_check
+                )
                 if np.any(conditions):
                     return False
                 # Check if any condition is False (i.e., any point fails the conditions)
@@ -140,8 +155,13 @@ class FreeSpaceGraph(BaseModel):
         grid_coordinates = np.transpose(
             [
                 np.tile(x_values, self.y_resolution * self.z_steps),
-                np.tile(np.repeat(y_values, self.x_resolution), self.z_steps),
-                np.repeat(z_values, self.x_resolution * self.y_resolution),
+                np.tile(
+                    np.repeat(y_values, self.x_resolution),
+                    self.z_steps,
+                ),
+                np.repeat(
+                    z_values, self.x_resolution * self.y_resolution
+                ),
             ]
         )
 
@@ -153,8 +173,13 @@ class FreeSpaceGraph(BaseModel):
         node_vals = np.transpose(
             [
                 np.tile(i_values, self.y_resolution * self.z_steps),
-                np.tile(np.repeat(j_values, self.x_resolution), self.z_steps),
-                np.repeat(k_values, self.x_resolution * self.y_resolution),
+                np.tile(
+                    np.repeat(j_values, self.x_resolution),
+                    self.z_steps,
+                ),
+                np.repeat(
+                    k_values, self.x_resolution * self.y_resolution
+                ),
             ]
         )
         # Map the node coordinates to positions
@@ -175,8 +200,12 @@ class FreeSpaceGraph(BaseModel):
             dy_values = np.array([-1, 1])
 
             dz_neighbors = (k + dz_values).clip(0, self.z_steps - 1)
-            dx_neighbors = (i + dx_values).clip(0, self.x_resolution - 1)
-            dy_neighbors = (j + dy_values).clip(0, self.y_resolution - 1)
+            dx_neighbors = (i + dx_values).clip(
+                0, self.x_resolution - 1
+            )
+            dy_neighbors = (j + dy_values).clip(
+                0, self.y_resolution - 1
+            )
 
             neighbors = np.transpose(
                 [
@@ -222,11 +251,16 @@ class FreeSpaceGraph(BaseModel):
         start_point = [0.0, 0.0, 0.0]  # always the reference point
         end_point = coord_to_cart(
             self.building_map.start_coord,
-            [self.building_map.end_coord[1], self.building_map.end_coord[0]],
+            [
+                self.building_map.end_coord[1],
+                self.building_map.end_coord[0],
+            ],
         ) + [0.0]
         G, pos = self.generate_equidistant_graph()
         start_distances = {
-            node: np.linalg.norm(np.array(start_point) - np.array(node))
+            node: np.linalg.norm(
+                np.array(start_point) - np.array(node)
+            )
             for node in G.nodes
         }
         end_distances = {
@@ -237,7 +271,9 @@ class FreeSpaceGraph(BaseModel):
         start_node = min(start_distances, key=start_distances.get)
         end_node = min(end_distances, key=end_distances.get)
 
-        direct_path = nx.shortest_path(G, source=start_node, target=end_node)
+        direct_path = nx.shortest_path(
+            G, source=start_node, target=end_node
+        )
         return np.array([pos[v] for v in direct_path])
 
     def plot_network_grid(self) -> None:

@@ -1,46 +1,30 @@
 import numpy as np
+import trimesh
 from scipy.spatial import Delaunay
 
 
-def rotation_matrix(axis, theta: np.ndarray) -> np.ndarray:
-    """Return the rotation matrix associated with counterclockwise rotation about
-    the given axis by theta radians."""
-    axis = np.asarray(axis)
-    axis = axis / np.linalg.norm(axis)
-    a = np.cos(theta / 2.0)
-    b, c, d = -axis * np.sin(theta / 2.0)
-    return np.array(
-        [
-            [
-                a * a + b * b - c * c - d * d,
-                2 * (b * c - a * d),
-                2 * (b * d + a * c),
-            ],
-            [
-                2 * (b * c + a * d),
-                a * a + c * c - b * b - d * d,
-                2 * (c * d - a * b),
-            ],
-            [
-                2 * (b * d - a * c),
-                2 * (c * d + a * b),
-                a * a + d * d - b * b - c * c,
-            ],
-        ],
-        dtype=np.float64,
+def get_position_rotation_height(
+    start_point: np.ndarray, end_point: np.ndarray
+):
+    # Calculate the height (distance) between the start and end points
+    height = np.linalg.norm(end_point - start_point)
+
+    # Calculate the position as the midpoint between the start and end points
+    position = (end_point - start_point) / 2 + start_point
+
+    # Calculate the direction vector from start to end points
+    direction = (end_point - start_point) / height
+
+    # Calculate the rotation matrix to align the cylinder with the direction vector
+    z_axis = np.array([0, 0, 1])  # Desired Z-axis for the cylinder
+    rotation = trimesh.transformations.rotation_matrix(
+        trimesh.transformations.angle_between_vectors(
+            z_axis, direction
+        ),
+        np.cross(z_axis, direction),
     )
 
-
-def rotate_points(
-    points: np.ndarray, axis_vector: np.ndarray
-) -> np.ndarray:
-    # Rotate points to align with axis_vector
-    rot_axis = np.cross([0, 0, 1], axis_vector)
-    if np.linalg.norm(rot_axis) > 1e-6:  # if not already aligned...
-        rot_angle = np.arccos(np.dot([0, 0, 1], axis_vector))
-        rot_matrix = rotation_matrix(rot_axis, rot_angle)
-        points = np.dot(points, rot_matrix)
-    return points
+    return position, rotation, height
 
 
 class PlanarPolygon:

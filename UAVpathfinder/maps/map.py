@@ -1,4 +1,5 @@
-from typing import List
+from typing import Optional
+import logging
 from pydantic import BaseModel
 from tqdm import tqdm
 import networkx as nx
@@ -7,7 +8,23 @@ import matplotlib.pyplot as plt
 import geopandas as gpd
 import numpy as np
 import pandas as pd
+from shapely.geometry import Polygon
 from UAVpathfinder.maps.map_utils import coord_to_cart
+
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+
+
+class Building(BaseModel):
+    color: Optional[str]
+    height: Optional[float]
+    footprint: Polygon
+
+    class Config:
+        arbitrary_types_allowed = True
 
 
 class Map(BaseModel):
@@ -15,13 +32,13 @@ class Map(BaseModel):
     A class representing a map with geographic coordinates and buildings.
 
     Attributes:
-        start_coord (List[float]): The geographic coordinates [latitude, longitude] of the start station.
-        end_coord (List[float]): The geographic coordinates [latitude, longitude] of the end station.
+        start_coord (list[float]): The geographic coordinates [latitude, longitude] of the start station.
+        end_coord (list[float]): The geographic coordinates [latitude, longitude] of the end station.
         level_height (float): The height of a building level in meters.
         buffer (float): The buffer value used to create a bounding box around the start and end stations.
 
     Methods:
-        generate_bbox() -> List[List[float]]:
+        generate_bbox() -> list[list[float]]:
             Creates a geographic bounding box around the start and end stations, including a buffer.
 
         get_2d_building_graph() -> nx.MultiDiGraph:
@@ -42,7 +59,7 @@ class Map(BaseModel):
         get_building_height(building: gpd.GeoDataFrame) -> float:
             Calculate the height of known buildings and places the average height if it does not exist.
 
-        generate_building_faces() -> List[List[List[float]]]:
+        generate_building_faces() -> list[list[list[float]]]:
             Generate 3D faces for buildings based on their 2D footprints.
 
     Note:
@@ -50,12 +67,12 @@ class Map(BaseModel):
 
     """
 
-    start_coord: List[float]
-    end_coord: List[float]
+    start_coord: list[float]
+    end_coord: list[float]
     level_height = 2.5  # height of a building level
     buffer = 0.0005
 
-    def generate_bbox(self) -> List[List[float]]:
+    def generate_bbox(self) -> list[list[float]]:
         """
         Creates a geographic bounding box around the start and end stations, including a buffer.
 
@@ -64,7 +81,7 @@ class Map(BaseModel):
         area and capture relevant nodes and edges.
 
         Returns:
-            List[List[float]]: A list of lists representing the bounding box coordinates.
+            list[list[float]]: A list of lists representing the bounding box coordinates.
             The outer list contains two inner lists:
             - The first inner list represents the minimum latitude and longitude values.
             - The second inner list represents the maximum latitude and longitude values.
@@ -101,7 +118,7 @@ class Map(BaseModel):
             The buildings are filtered based on the "building" tag.
 
         Raises:
-            OSError: If there is an error retrieving the buildings graph using OSMnx.
+            Exception: If there is an error retrieving the buildings graph using OSMnx.
         """
         # TODO: Might not even need this
         box = self.generate_bbox()
@@ -121,7 +138,7 @@ class Map(BaseModel):
                 custom_filter='["building"]',
             )
         except Exception as e:
-            raise OSError(
+            raise Exception(
                 "Error retrieving buildings graph using OSMnx."
             ) from e
 
@@ -138,7 +155,7 @@ class Map(BaseModel):
             Only buildings with the "building" tag set to True are included in the result.
 
         Raises:
-            OSError: If there is an error retrieving the building data using OSMnx.
+            Exception: If there is an error retrieving the building data using OSMnx.
         """
         box = self.generate_bbox()
         try:
@@ -151,7 +168,7 @@ class Map(BaseModel):
             )
             return buildings
         except Exception as e:
-            raise OSError(
+            raise Exception(
                 "Error retrieving building data using OSMnx."
             ) from e
 
@@ -168,7 +185,7 @@ class Map(BaseModel):
             or a script where Matplotlib is configured to show the plots inline.
 
         Raises:
-            OSError: If there is an error retrieving the building graph or building data.
+            Exception: If there is an error retrieving the building graph or building data.
         """
         try:
             # Retrieve and plot the 2D building graph
@@ -184,41 +201,40 @@ class Map(BaseModel):
             plt.show()
 
         except Exception as e:
-            raise OSError("Error plotting 2D building data.") from e
+            raise Exception("Error plotting 2D building data.") from e
 
-    def avg_known_building_height(self) -> float:
+    def avg_known_building_height(self, building_levels) -> float:
         """
         Calculate the average height of known buildings based on their heights and level heights.
 
         Returns:
             float: Average height of known buildings in meters.
         """
-        building_levels = self.get_2d_buildings_data()[
-            "building:levels"
-        ].dropna()
-        building_levels = building_levels.astype(float)
-        average_height = np.average(
-            building_levels * self.level_height
+        building_levels = pd.to_numeric(
+            building_levels, errors="coerce"
         )
+        building_levels = building_levels.dropna()
+
+        average_height = np.average(
+            building_levels.astype(float) * self.level_height
+        )
+        print(average_height)
         return average_height
 
-    def max_known_building_height(self) -> float:
+    def max_known_building_height(self, building_levels) -> float:
         """
         Calculate the maximum height of known buildings.
 
         Returns:
             float: Maximum height of known buildings in meters.
         """
-        building_levels = self.get_2d_buildings_data()[
-            "building:levels"
-        ].dropna()
         max_height = (
             max(building_levels.astype(float)) * self.level_height
         )
         return max_height
 
     def get_building_height(
-        self, building: gpd.GeoDataFrame
+        self, building: gpd.GeoDataFrame, average_height: float
     ) -> float:
         # TODO: what does it mean when a building height is NaN
         """
@@ -227,41 +243,33 @@ class Map(BaseModel):
         Returns:
             float: Height of building in meters.
         """
+        building_levels = building["building:levels"]
+        try:
+            float(building_levels)
+        except ValueError:
+            return average_height
         if not pd.isna(building["building:levels"]):
             return (
                 float(building["building:levels"]) * self.level_height
             )
-        return self.avg_known_building_height()
+        return average_height
 
-    def get_all_building_heights(self) -> List[float]:
+    def get_all_building_heights(
+        self, building_levels, avg_known_building_height
+    ) -> list[float]:
         """
         Retrieve the heights of all buildings.
 
         Returns:
-            List[float]: A list of building heights.
+            list[float]: A list of building heights.
         """
-        building_levels = (
-            self.get_2d_buildings_data()["building:levels"]
-            .astype(float)
-            .mul(
-                self.level_height,
-                fill_value=self.avg_known_building_height(),
-            )
+        building_levels = building_levels.astype(float).mul(
+            self.level_height,
+            fill_value=avg_known_building_height,
         )
         return building_levels.tolist()
 
-    def get_all_building_bases(self) -> List[List[float]]:
-        """
-        Retrieve the bases of all buildings.
-
-        Returns:
-            List[List[float]]: A list of building bases represented as lists of coordinates.
-        """
-        return [
-            building[0] for building in self.generate_building_faces()
-        ]
-
-    def generate_building_faces(self) -> List[List[List[float]]]:
+    def generate_building_faces(self) -> list[list[list[float]]]:
         """
         Generate 3D faces for buildings based on their 2D footprints.
 
@@ -272,24 +280,35 @@ class Map(BaseModel):
         of nested lists.
 
         Returns:
-            List[List[List[float]]]: A list of nested lists representing the 3D faces of the buildings.
+            list[list[list[float]]]: A list of nested lists representing the 3D faces of the buildings.
 
         Note:
             The 2D buildings are obtained from `get_2d_buildings_data` which retrieves the building data.
             The `coord_to_cart` function is used to convert the geographic coordinates to Cartesian coordinates.
 
         Raises:
-            OSError: If there is an error retrieving the 2D building data.
+            Exception: If there is an error retrieving the 2D building data.
         """
-        try:
-            buildings = []
-            min_ref_pt = self.generate_bbox()[0]
-            # Iterate over buildings
+        buildings = []
+        min_ref_pt = self.generate_bbox()[0]
+        logging.info("Getting buildings data...")
+        buildings_data = self.get_2d_buildings_data()
+        logging.info("Got buildings data...")
+        building_levels = buildings_data["building:levels"]
+        avg_known_building_height = self.avg_known_building_height(
+            building_levels
+        )
+        # Iterate over buildings
+        with tqdm(total=buildings_data.shape[0], unit="item") as pbar:
             for (
                 _,
                 building,
-            ) in self.get_2d_buildings_data().iterrows():
-                height = self.get_building_height(building)
+            ) in buildings_data.iterrows():
+                height = self.get_building_height(
+                    building, avg_known_building_height
+                )
+                if not height:
+                    height = avg_known_building_height
 
                 if building.geometry.geom_type == "Polygon":
                     base_coord = building.geometry.exterior.coords
@@ -299,77 +318,9 @@ class Map(BaseModel):
                             for coord in base_coord
                         ]
                     )
-
-                    building_faces = [
-                        np.hstack(
-                            (
-                                base_coord_cart,
-                                np.full(
-                                    (base_coord_cart.shape[0], 1),
-                                    0,
-                                ),
-                            )
-                        ),
-                        np.hstack(
-                            (
-                                base_coord_cart,
-                                np.full(
-                                    (base_coord_cart.shape[0], 1),
-                                    height,
-                                ),
-                            )
-                        ),
-                    ]
-
-                    for idx in range(len(base_coord) - 1):
-                        building_faces.append(
-                            np.vstack(
-                                (
-                                    np.hstack(
-                                        (
-                                            base_coord_cart[idx],
-                                            0.0,
-                                        )
-                                    ),
-                                    np.hstack(
-                                        (
-                                            base_coord_cart[idx],
-                                            height,
-                                        )
-                                    ),
-                                    np.hstack(
-                                        (
-                                            base_coord_cart[idx + 1],
-                                            height,
-                                        )
-                                    ),
-                                    np.hstack(
-                                        (
-                                            base_coord_cart[idx + 1],
-                                            0.0,
-                                        )
-                                    ),
-                                )
-                            )
-                        )
-
-                    # Handle the last face
-                    building_faces.append(
-                        np.vstack(
-                            (
-                                np.hstack((base_coord_cart[0], 0.0)),
-                                np.hstack(
-                                    (base_coord_cart[0], height)
-                                ),
-                                np.hstack(
-                                    (base_coord_cart[-1], height)
-                                ),
-                                np.hstack((base_coord_cart[-1], 0.0)),
-                            )
-                        )
+                    footprint = Polygon(base_coord_cart)
+                    buildings.append(
+                        Building(footprint=footprint, height=height)
                     )
-
-                    buildings.append(building_faces)
-            return np.array(buildings, dtype=object)
-        except Exception as e:
-            raise OSError("Error generating building faces.") from e
+                pbar.update(1)
+        return buildings
